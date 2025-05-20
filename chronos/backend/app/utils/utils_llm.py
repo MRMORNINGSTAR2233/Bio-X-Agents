@@ -12,18 +12,18 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Grok AI API settings
-GROK_API_KEY = os.getenv("GROK_API_KEY")
-GROK_API_URL = os.getenv("GROK_API_URL")
-GROK_MODEL = os.getenv("GROK_MODEL", "grok-1")
+# Groq AI API settings
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_URL = os.getenv("GROQ_API_URL")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3-8b-8192")
 
 async def generate_hypothesis(historical_node: Dict[str, Any], modern_node: Dict[str, Any]) -> str:
     """
     Generate a hypothesis by connecting historical observation with modern study
-    using the Grok AI API
+    using the Groq AI API
     """
-    if not GROK_API_KEY or not GROK_API_URL:
-        raise ValueError("Grok AI API key and URL must be configured")
+    if not GROQ_API_KEY or not GROQ_API_URL:
+        raise ValueError("Groq AI API key and URL must be configured")
     
     # Construct the prompt for the AI
     prompt = f"""
@@ -48,11 +48,11 @@ async def generate_hypothesis(historical_node: Dict[str, Any], modern_node: Dict
         # Prepare the API request
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {GROK_API_KEY}"
+            "Authorization": f"Bearer {GROQ_API_KEY}"
         }
         
         payload = {
-            "model": GROK_MODEL,
+            "model": GROQ_MODEL,
             "messages": [
                 {"role": "system", "content": "You are a scientific hypothesis generator."},
                 {"role": "user", "content": prompt}
@@ -63,16 +63,16 @@ async def generate_hypothesis(historical_node: Dict[str, Any], modern_node: Dict
         
         # Make the API request
         async with aiohttp.ClientSession() as session:
-            async with session.post(GROK_API_URL, json=payload, headers=headers) as response:
+            async with session.post(GROQ_API_URL, json=payload, headers=headers) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    logger.error(f"Error from Grok AI API: {error_text}")
-                    raise Exception(f"Grok AI API error: {response.status}")
+                    logger.error(f"Error from Groq AI API: {error_text}")
+                    raise Exception(f"Groq AI API error: {response.status}")
                 
                 result = await response.json()
                 
                 # Extract the generated hypothesis from the response
-                # The exact format will depend on the Grok API response structure
+                # The exact format will depend on the Groq API response structure
                 hypothesis = result.get("choices", [{}])[0].get("message", {}).get("content", "")
                 
                 if not hypothesis:

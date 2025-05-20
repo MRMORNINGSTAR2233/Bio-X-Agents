@@ -4,7 +4,7 @@ import time
 import os
 from typing import List, Dict, Any, Optional
 import logging
-import aioredis
+from redis.asyncio import Redis
 from dotenv import load_dotenv
 
 # Configure logging
@@ -30,7 +30,7 @@ redis = None
 async def get_redis():
     global redis
     if redis is None:
-        redis = await aioredis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+        redis = Redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
     return redis
 
 async def cache_set(key: str, value: Any, ttl: int = 3600):

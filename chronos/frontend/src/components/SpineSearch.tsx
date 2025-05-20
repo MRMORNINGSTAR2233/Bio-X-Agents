@@ -2,7 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, CheckCircle, AlertTriangle } from "lucide-react";
 import api, { Article, SearchResult } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -15,6 +15,8 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [ingestingArticle, setIngestingArticle] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState(false);
 
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
@@ -24,11 +26,20 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
     }
 
     setLoading(true);
+    setConnectionError(false);
+    
     try {
       const searchResults = await api.searchSpineArticles(query);
-      setResults(searchResults);
+      if (searchResults) {
+        setResults(searchResults);
+      } else {
+        setConnectionError(true);
+        toast.error("Could not connect to the backend. Please ensure the server is running.");
+      }
     } catch (error) {
       console.error('Search error:', error);
+      setConnectionError(true);
+      toast.error("Failed to connect to the backend. Please check the server.");
     } finally {
       setLoading(false);
     }
@@ -36,15 +47,21 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
 
   const handleSelectArticle = async (article: Article) => {
     setSelectedArticle(article);
+    setIngestingArticle(article.pmid);
+    
     try {
       const response = await api.ingestModern(article);
       if (response?.id) {
         toast.success("Article ingested to graph successfully");
         onArticleSelect(article, response.id);
+      } else {
+        toast.error("Failed to ingest article");
       }
     } catch (error) {
       console.error('Error ingesting article:', error);
       toast.error("Failed to ingest article to graph");
+    } finally {
+      setIngestingArticle(null);
     }
   };
 
@@ -56,12 +73,22 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1"
+          aria-label="Search query"
         />
         <Button type="submit" disabled={loading}>
           {loading ? 'Searching...' : 'Search'}
           {!loading && <SearchIcon className="ml-2 h-4 w-4" />}
         </Button>
       </form>
+
+      {connectionError && (
+        <div className="p-4 border border-destructive rounded-lg bg-destructive/10 flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
+          <p className="text-sm text-destructive">
+            Could not connect to the backend. Please ensure the server is running.
+          </p>
+        </div>
+      )}
 
       {results && (
         <div className="space-y-4">
@@ -79,7 +106,7 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
                   className={`cursor-pointer transition-colors hover:bg-muted/50 ${
                     selectedArticle?.pmid === article.pmid ? 'border-primary' : ''
                   }`}
-                  onClick={() => handleSelectArticle(article)}
+                  onClick={() => ingestingArticle ? null : handleSelectArticle(article)}
                 >
                   <CardContent className="p-4">
                     <h3 className="font-medium line-clamp-2">{article.title}</h3>
@@ -101,11 +128,19 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
                         variant="outline" 
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleSelectArticle(article);
+                          if (!ingestingArticle) handleSelectArticle(article);
                         }}
                         size="sm"
+                        disabled={ingestingArticle === article.pmid}
+                        className="flex items-center gap-1"
                       >
-                        Select
+                        {ingestingArticle === article.pmid ? (
+                          <>Processing... <span className="ml-1 animate-spin">⏳</span></>
+                        ) : selectedArticle?.pmid === article.pmid ? (
+                          <>Selected <CheckCircle className="ml-1 h-3 w-3" /></>
+                        ) : (
+                          'Select'
+                        )}
                       </Button>
                     </div>
                   </CardContent>

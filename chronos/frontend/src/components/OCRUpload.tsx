@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, FileText } from "lucide-react";
+import { Upload, FileText, AlertTriangle, CheckCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
 import { toast } from "sonner";
 
@@ -15,11 +16,14 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
   const [loading, setLoading] = useState(false);
   const [extractedText, setExtractedText] = useState('');
   const [sourceId, setSourceId] = useState('');
+  const [connectionError, setConnectionError] = useState(false);
+  const [ingestLoading, setIngestLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+      setConnectionError(false);
     }
   };
 
@@ -30,14 +34,20 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
     }
 
     setLoading(true);
+    setConnectionError(false);
+    
     try {
       const response = await api.processOCR(file);
       if (response) {
         setExtractedText(response.text);
         toast.success("Text extracted successfully");
+      } else {
+        setConnectionError(true);
+        toast.error("Could not connect to the backend OCR service");
       }
     } catch (error) {
       console.error('OCR error:', error);
+      setConnectionError(true);
       toast.error("Failed to extract text from image");
     } finally {
       setLoading(false);
@@ -55,18 +65,20 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
       return;
     }
 
-    setLoading(true);
+    setIngestLoading(true);
     try {
       const response = await api.ingestHistorical(extractedText, sourceId);
       if (response?.id) {
         toast.success("Historical observation ingested to graph");
         onTextExtracted(extractedText, response.id);
+      } else {
+        toast.error("Failed to ingest historical observation");
       }
     } catch (error) {
       console.error('Ingest error:', error);
       toast.error("Failed to ingest historical observation");
     } finally {
-      setLoading(false);
+      setIngestLoading(false);
     }
   };
 
@@ -89,10 +101,17 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
           Upload an image containing historical text to extract and analyze.
         </p>
 
+        {connectionError && (
+          <div className="p-3 border border-destructive rounded-lg bg-destructive/10 flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-destructive">
+              Connection to backend failed. Please ensure the OCR service is running and properly configured.
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
-          <label htmlFor="file-upload" className="sr-only">Upload image file</label>
           <input
-            id="file-upload"
             type="file"
             className="hidden"
             ref={fileInputRef}
@@ -110,9 +129,13 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
           <Button 
             onClick={handleUpload} 
             disabled={!file || loading}
+            className="flex items-center gap-1"
           >
-            {loading ? "Processing..." : "Extract Text"}
-            <Upload className="ml-2 h-4 w-4" />
+            {loading ? (
+              <>Processing... <span className="ml-1 animate-spin">⏳</span></>
+            ) : (
+              <>Extract Text <Upload className="ml-2 h-4 w-4" /></>
+            )}
           </Button>
         </div>
 
@@ -123,18 +146,26 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
               onChange={(e) => setExtractedText(e.target.value)}
               className="min-h-[200px]"
               placeholder="Extracted text will appear here..."
+              aria-label="Extracted text"
             />
             
             <div className="flex gap-2">
-              <input
-                type="text"
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              <Input
                 placeholder="Source ID (e.g., book title, manuscript reference)"
                 value={sourceId}
                 onChange={(e) => setSourceId(e.target.value)}
+                aria-label="Source ID"
               />
-              <Button onClick={handleIngest} disabled={!extractedText.trim() || !sourceId.trim() || loading}>
-                Ingest to Graph
+              <Button 
+                onClick={handleIngest} 
+                disabled={!extractedText.trim() || !sourceId.trim() || ingestLoading}
+                className="whitespace-nowrap flex items-center gap-1"
+              >
+                {ingestLoading ? (
+                  <>Ingesting... <span className="ml-1 animate-spin">⏳</span></>
+                ) : (
+                  <>Ingest to Graph <CheckCircle className="ml-2 h-4 w-4" /></>
+                )}
               </Button>
             </div>
           </div>

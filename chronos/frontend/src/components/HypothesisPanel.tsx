@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LightbulbIcon, FlaskConical } from "lucide-react";
-import api, { HypothesisResponse } from "@/lib/api";
+import { LightbulbIcon, FlaskConical, Share2 } from "lucide-react";
+import api, { HypothesisResponse, DKGMetadata } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
@@ -13,8 +13,10 @@ interface HypothesisPanelProps {
 
 export default function HypothesisPanel({ histId, modernId }: HypothesisPanelProps) {
   const [loading, setLoading] = useState(false);
+  const [publishLoading, setPublishLoading] = useState(false);
   const [hypothesis, setHypothesis] = useState<HypothesisResponse | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
 
   const generateHypothesis = async () => {
     if (!histId || !modernId) {
@@ -28,6 +30,7 @@ export default function HypothesisPanel({ histId, modernId }: HypothesisPanelPro
       if (response) {
         setHypothesis(response);
         setDialogOpen(true);
+        setPublishSuccess(false);
         toast.success("Hypothesis generated successfully");
       }
     } catch (error) {
@@ -35,6 +38,38 @@ export default function HypothesisPanel({ histId, modernId }: HypothesisPanelPro
       toast.error("Failed to generate hypothesis");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const publishToDKG = async () => {
+    if (!hypothesis) {
+      toast.error("Please generate a hypothesis first");
+      return;
+    }
+
+    setPublishLoading(true);
+    try {
+      // Create metadata for the DKG
+      const metadata: DKGMetadata = {
+        title: `Hypothesis connecting ${histId} and ${modernId}`,
+        description: hypothesis.hypothesis,
+        keywords: ["chronos", "hypothesis", "scientific-connection"],
+        date: new Date().toISOString(),
+        sources: hypothesis.evidence,
+        type: "scientific-hypothesis"
+      };
+
+      const response = await api.writeDKGStub(hypothesis.evidence[0], metadata);
+      
+      if (response) {
+        setPublishSuccess(true);
+        toast.success("Hypothesis published to DKG successfully");
+      }
+    } catch (error) {
+      console.error('Error publishing to DKG:', error);
+      toast.error("Failed to publish to DKG");
+    } finally {
+      setPublishLoading(false);
     }
   };
   
@@ -102,7 +137,17 @@ export default function HypothesisPanel({ histId, modernId }: HypothesisPanelPro
                 </ul>
               </div>
               
-              <div className="flex justify-end">
+              <div className="flex justify-between items-center">
+                <Button
+                  variant="outline"
+                  onClick={() => publishToDKG()}
+                  disabled={publishLoading || publishSuccess}
+                  className="flex items-center gap-2"
+                >
+                  {publishLoading ? 'Publishing...' : publishSuccess ? 'Published to DKG' : 'Publish to DKG'}
+                  <Share2 className="h-4 w-4" />
+                </Button>
+                
                 <Button
                   variant="outline"
                   onClick={() => setDialogOpen(false)}

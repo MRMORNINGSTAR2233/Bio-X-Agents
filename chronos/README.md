@@ -33,7 +33,7 @@ Chronos consists of two main components:
 
 3. Edit the `.env` file with your API keys and credentials:
    - PUBMED_API_KEY (optional but recommended)
-   - GROK_API_KEY (required for hypothesis generation)
+   - GROQ_API_KEY (required for hypothesis generation)
    - NEO4J_PASSWORD (change if needed)
 
 4. Build and start the backend services:
