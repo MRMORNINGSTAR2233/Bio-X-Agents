@@ -1,0 +1,111 @@
+# Environment variables
+.env
+.env.*
+*.env
+.environment
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv
+env/
+venv/
+ENV/
+
+# Docker
+.docker/
+docker-compose.override.yml
+.dockerignore
+volumes/
+docker-data/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+redis-data/
+neo4j-data/
+postgres-data/
+
+# Logs
+*.log
+logs/
+app.log
+error.log
+access.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+test-results/
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# OS Files
+.DS_Store
+Thumbs.db
+.Trashes
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# API Keys and Configuration
+config/secrets.json
+config/local.json
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# FastAPI/Uvicorn
+.uvicorn.pid
+
+# Docker volumes and data
+volumes/
+data/
+neo4j_data/
+redis_data/
+postgres_data/
+
+# Docker override files (may contain sensitive configs)
+docker-compose.override.yml
+docker-compose.prod.yml
+docker-compose.local.yml
+
+# Docker build files
+.dockerignore

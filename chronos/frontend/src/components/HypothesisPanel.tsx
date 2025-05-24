@@ -51,15 +51,17 @@ export default function HypothesisPanel({ histId, modernId }: HypothesisPanelPro
     try {
       // Create metadata for the DKG
       const metadata: DKGMetadata = {
-        title: `Hypothesis connecting ${histId} and ${modernId}`,
+        title: `Scientific Hypothesis: ${histId} ↔ ${modernId}`,
         description: hypothesis.hypothesis,
-        keywords: ["chronos", "hypothesis", "scientific-connection"],
+        keywords: ["chronos", "hypothesis", "scientific-connection", "biomedical"],
         date: new Date().toISOString(),
-        sources: hypothesis.evidence,
-        type: "scientific-hypothesis"
+        type: "scientific-hypothesis",
+        evidence_sources: hypothesis.evidence,
+        relationship_id: (hypothesis as HypothesisResponse & {relationship_id?: string}).relationship_id || "unknown"
       };
 
-      const response = await api.writeDKGStub(hypothesis.evidence[0], metadata);
+      const nodeId = `hyp-${histId}-${modernId}-${Date.now()}`;
+      const response = await api.writeDKGStub(nodeId, metadata);
       
       if (response) {
         setPublishSuccess(true);

@@ -40,6 +40,18 @@ export interface HypothesisRequest {
 export interface HypothesisResponse {
   hypothesis: string;
   evidence: string[];
+  relationship_id?: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  services: {
+    redis: string;
+    neo4j: string;
+    environment: string;
+  };
+  missing_env_vars: string[];
+  timestamp: number;
 }
 
 export interface OCRResponse {
@@ -54,16 +66,44 @@ interface ApiErrorResponse {
 }
 
 const handleApiError = (error: Error | unknown, message: string = "An error occurred") => {
-  console.error(error);
-  const errorMessage = typeof error === 'object' && error !== null && 'response' in error && 
-    error.response && typeof error.response === 'object' && 'data' in error.response ? 
-    ((error.response as ApiErrorResponse).data?.detail) || message : message;
+  console.error('API Error:', error);
+  let errorMessage = message;
+  
+  if (error instanceof Error) {
+    errorMessage = error.message || message;
+  } else if (typeof error === 'object' && error !== null) {
+    if ('response' in error && error.response && typeof error.response === 'object') {
+      const response = error.response as ApiErrorResponse;
+      errorMessage = response.data?.detail || message;
+    } else if ('message' in error) {
+      errorMessage = (error as { message: string }).message;
+    }
+  }
+  
   toast.error(errorMessage);
   return null;
 };
 
 // API methods
 const api = {
+  // Health check endpoint
+  healthCheck: async (): Promise<HealthResponse | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Health check failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Health check error:', error);
+      return null;
+    }
+  },
+
   // Search PubMed articles
   searchSpineArticles: async (
     query: string,
@@ -79,12 +119,70 @@ const api = {
       const response = await fetch(url.toString());
       
       if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
+        const errorData = await response.text();
+        console.error('Search API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData
+        });
+        throw new Error(
+          `Search failed: ${response.status} ${response.statusText}\n${errorData}`
+        );
       }
 
-      return await response.json();
+      const data = await response.json();
+      if (!data || !Array.isArray(data.results)) {
+        throw new Error('Invalid response format from search API');
+      }
+
+      return data;
     } catch (error) {
-      return handleApiError(error, "Failed to search articles");
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return handleApiError(error, "Failed to connect to search API. Please check if the backend is running.");
+      }
+      return handleApiError(error, "Failed to search articles. Please try again.");
+    }
+  },
+
+  // Search historical articles (pre-2000)
+  searchHistoricalArticles: async (
+    query: string,
+    page: number = 1,
+    perPage: number = 10,
+    maxYear: number = 2000
+  ): Promise<SearchResult | null> => {
+    try {
+      const url = new URL(`${API_BASE_URL}/api/v1/historical-articles/search`);
+      url.searchParams.append('q', query);
+      url.searchParams.append('page', page.toString());
+      url.searchParams.append('per_page', perPage.toString());
+      url.searchParams.append('max_year', maxYear.toString());
+
+      const response = await fetch(url.toString());
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('Historical search API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData
+        });
+        throw new Error(
+          `Historical search failed: ${response.status} ${response.statusText}\n${errorData}`
+        );
+      }
+
+      const data = await response.json();
+      if (!data || !Array.isArray(data.results)) {
+        throw new Error('Invalid response format from historical search API');
+      }
+
+      return data;
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        return handleApiError(error, "Failed to connect to historical search API. Please check if the backend is running.");
+      }
+      return handleApiError(error, "Failed to search historical articles. Please try again.");
     }
   },
 

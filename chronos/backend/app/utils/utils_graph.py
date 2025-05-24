@@ -1,6 +1,7 @@
 from neo4j import AsyncGraphDatabase
 import os
 import uuid
+import asyncio
 from dotenv import load_dotenv
 import logging
 from typing import Dict, Any, Optional
@@ -21,14 +22,51 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "chronos")
 # Neo4j driver instance
 driver = None
 
-async def get_driver():
+async def get_driver_with_retry(max_retries: int = 3, retry_delay: float = 1.0):
+    """
+    Get Neo4j driver with retry logic for better connection handling
+    """
     global driver
-    if driver is None:
-        driver = AsyncGraphDatabase.driver(
-            NEO4J_URI, 
-            auth=(NEO4J_USER, NEO4J_PASSWORD)
-        )
+    
+    for attempt in range(max_retries):
+        try:
+            if driver is None:
+                driver = AsyncGraphDatabase.driver(
+                    NEO4J_URI, 
+                    auth=(NEO4J_USER, NEO4J_PASSWORD)
+                )
+                
+            # Test the connection
+            async with driver.session() as session:
+                await session.run("RETURN 1")
+                
+            logger.info(f"Neo4j connection established successfully on attempt {attempt + 1}")
+            return driver
+            
+        except Exception as e:
+            logger.warning(f"Neo4j connection attempt {attempt + 1} failed: {str(e)}")
+            
+            # Close the failed driver
+            if driver is not None:
+                try:
+                    await driver.close()
+                except:
+                    pass
+                driver = None
+            
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+            else:
+                logger.error(f"Failed to connect to Neo4j after {max_retries} attempts")
+                raise e
+    
     return driver
+
+async def get_driver():
+    """
+    Backward compatibility wrapper for get_driver_with_retry
+    """
+    return await get_driver_with_retry()
 
 async def close_driver():
     global driver
@@ -36,11 +74,38 @@ async def close_driver():
         await driver.close()
         driver = None
 
+async def execute_query_with_retry(query: str, parameters: Dict[str, Any] = None, max_retries: int = 3):
+    """
+    Execute a Neo4j query with retry logic for better reliability
+    """
+    global driver
+    for attempt in range(max_retries):
+        try:
+            driver = await get_driver_with_retry()
+            async with driver.session() as session:
+                result = await session.run(query, parameters or {})
+                return result
+                
+        except Exception as e:
+            logger.warning(f"Query execution attempt {attempt + 1} failed: {str(e)}")
+            
+            if attempt < max_retries - 1:
+                # Reset driver on failure to force reconnection
+                if driver is not None:
+                    try:
+                        await driver.close()
+                    except:
+                        pass
+                    driver = None
+                await asyncio.sleep(0.5 * (attempt + 1))
+            else:
+                logger.error(f"Query failed after {max_retries} attempts")
+                raise e
+
 async def create_historical_observation(text: str, source_id: str) -> str:
     """
     Create a historical observation node in Neo4j
     """
-    driver = await get_driver()
     node_id = f"hist-{uuid.uuid4()}"
     
     query = """
@@ -54,12 +119,15 @@ async def create_historical_observation(text: str, source_id: str) -> str:
     """
     
     try:
+        driver = await get_driver_with_retry()
         async with driver.session() as session:
             result = await session.run(
                 query,
-                id=node_id,
-                text=text,
-                source_id=source_id
+                {
+                    "id": node_id,
+                    "text": text,
+                    "source_id": source_id
+                }
             )
             record = await result.single()
             logger.info(f"Created historical observation node: {node_id}")
@@ -72,7 +140,6 @@ async def create_modern_study(article: Article) -> str:
     """
     Create a modern study node in Neo4j from an Article model
     """
-    driver = await get_driver()
     node_id = f"mod-{uuid.uuid4()}"
     
     query = """
@@ -92,18 +159,21 @@ async def create_modern_study(article: Article) -> str:
     """
     
     try:
+        driver = await get_driver_with_retry()
         async with driver.session() as session:
             result = await session.run(
                 query,
-                id=node_id,
-                pmid=article.pmid,
-                title=article.title,
-                authors=article.authors,
-                abstract=article.abstract,
-                publication_date=article.publication_date,
-                journal=article.journal,
-                doi=article.doi,
-                keywords=article.keywords
+                {
+                    "id": node_id,
+                    "pmid": article.pmid,
+                    "title": article.title,
+                    "authors": article.authors,
+                    "abstract": article.abstract,
+                    "publication_date": article.publication_date,
+                    "journal": article.journal,
+                    "doi": article.doi,
+                    "keywords": article.keywords
+                }
             )
             record = await result.single()
             logger.info(f"Created modern study node: {node_id}")
@@ -116,8 +186,6 @@ async def get_node_by_id(node_id: str) -> Optional[Dict[str, Any]]:
     """
     Retrieve a node from Neo4j by its ID
     """
-    driver = await get_driver()
-    
     query = """
     MATCH (n)
     WHERE n.id = $id
@@ -125,8 +193,9 @@ async def get_node_by_id(node_id: str) -> Optional[Dict[str, Any]]:
     """
     
     try:
+        driver = await get_driver_with_retry()
         async with driver.session() as session:
-            result = await session.run(query, id=node_id)
+            result = await session.run(query, {"id": node_id})
             record = await result.single()
             
             if not record:
@@ -144,7 +213,6 @@ async def create_hypothesis_connection(hist_id: str, mod_id: str, hypothesis: st
     Create a relationship between historical observation and modern study
     with the hypothesis as a property
     """
-    driver = await get_driver()
     rel_id = f"hyp-{uuid.uuid4()}"
     
     query = """
@@ -159,13 +227,16 @@ async def create_hypothesis_connection(hist_id: str, mod_id: str, hypothesis: st
     """
     
     try:
+        driver = await get_driver_with_retry()
         async with driver.session() as session:
             result = await session.run(
                 query,
-                hist_id=hist_id,
-                mod_id=mod_id,
-                rel_id=rel_id,
-                hypothesis=hypothesis
+                {
+                    "hist_id": hist_id,
+                    "mod_id": mod_id,
+                    "rel_id": rel_id,
+                    "hypothesis": hypothesis
+                }
             )
             record = await result.single()
             logger.info(f"Created hypothesis connection: {rel_id}")

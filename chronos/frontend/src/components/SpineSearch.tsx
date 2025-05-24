@@ -2,7 +2,7 @@ import { useState, FormEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { SearchIcon, CheckCircle, AlertTriangle } from "lucide-react";
+import { SearchIcon, CheckCircle, AlertTriangle, Microscope } from "lucide-react";
 import api, { Article, SearchResult } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -27,11 +27,17 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
 
     setLoading(true);
     setConnectionError(false);
+    setResults(null); // Clear previous results
     
     try {
       const searchResults = await api.searchSpineArticles(query);
       if (searchResults) {
         setResults(searchResults);
+        if (searchResults.results.length === 0) {
+          toast.info(`No modern articles found for "${query}". Try different keywords.`);
+        } else {
+          toast.success(`Found ${searchResults.results.length} modern articles for "${query}"`);
+        }
       } else {
         setConnectionError(true);
         toast.error("Could not connect to the backend. Please ensure the server is running.");
@@ -39,7 +45,7 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
     } catch (error) {
       console.error('Search error:', error);
       setConnectionError(true);
-      toast.error("Failed to connect to the backend. Please check the server.");
+      toast.error("Failed to search articles. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -67,13 +73,19 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
 
   return (
     <div className="w-full space-y-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Microscope className="h-5 w-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Modern Articles</h2>
+        <span className="text-sm text-muted-foreground">(Recent Studies)</span>
+      </div>
+      
       <form onSubmit={handleSearch} className="flex w-full gap-2">
         <Input
-          placeholder="Search medical publications..."
+          placeholder="Search modern medical publications..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="flex-1"
-          aria-label="Search query"
+          aria-label="Modern search query"
         />
         <Button type="submit" disabled={loading}>
           {loading ? 'Searching...' : 'Search'}
@@ -92,9 +104,9 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
 
       {results && (
         <div className="space-y-4">
-          <h2 className="text-xl font-semibold">
-            Search Results{results.results.length > 0 && `: ${results.results.length} found`}
-          </h2>
+          <h3 className="text-md font-medium">
+            Modern Search Results{results.results.length > 0 && `: ${results.results.length} found`}
+          </h3>
           
           {results.results.length === 0 ? (
             <p className="text-muted-foreground">No articles found for this query.</p>
@@ -109,21 +121,46 @@ export default function SpineSearch({ onArticleSelect }: SpineSearchProps) {
                   onClick={() => ingestingArticle ? null : handleSelectArticle(article)}
                 >
                   <CardContent className="p-4">
-                    <h3 className="font-medium line-clamp-2">{article.title}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {article.authors?.join(', ')}
+                    <h3 className="font-medium line-clamp-2 mb-2">{article.title}</h3>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      <strong>PMID:</strong> {article.pmid}
+                    </p>
+                    <p className="text-sm text-muted-foreground mb-1">
+                      <strong>Authors:</strong> {article.authors?.length > 0 ? article.authors.slice(0, 3).join(', ') : 'Unknown authors'}
+                      {article.authors?.length > 3 && ' et al.'}
                     </p>
                     {article.journal && (
-                      <p className="text-sm mt-1">
-                        {article.journal} {article.publication_date && `• ${article.publication_date}`}
+                      <p className="text-sm mb-1">
+                        <strong>Journal:</strong> {article.journal} 
+                        {article.publication_date && article.publication_date !== 'Unknown date' && ` (${article.publication_date})`}
                       </p>
                     )}
-                    {article.abstract && (
+                    {article.doi && (
+                      <p className="text-xs text-blue-600 mb-2">
+                        <strong>DOI:</strong> {article.doi}
+                      </p>
+                    )}
+                    {article.abstract && article.abstract !== 'No abstract available' && (
                       <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
                         {article.abstract}
                       </p>
                     )}
-                    <div className="mt-2 flex justify-end">
+                    {article.keywords && article.keywords.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-muted-foreground mb-1"><strong>Keywords:</strong></p>
+                        <div className="flex flex-wrap gap-1">
+                          {article.keywords.slice(0, 5).map((keyword, idx) => (
+                            <span key={idx} className="inline-block bg-muted px-2 py-1 text-xs rounded">
+                              {keyword}
+                            </span>
+                          ))}
+                          {article.keywords.length > 5 && (
+                            <span className="text-xs text-muted-foreground">+{article.keywords.length - 5} more</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-4 flex justify-end">
                       <Button 
                         variant="outline" 
                         onClick={(e) => {

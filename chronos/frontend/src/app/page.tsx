@@ -2,18 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import SpineSearch from '@/components/SpineSearch';
+import UnifiedSearch from '@/components/UnifiedSearch';
 import OCRUpload from '@/components/OCRUpload';
 import HypothesisPanel from '@/components/HypothesisPanel';
 import GraphView from '@/components/GraphView';
 import { Article } from '@/lib/api';
-import { BrainCircuit, Wifi, WifiOff } from 'lucide-react';
+import api from '@/lib/api';
+import { BrainCircuit, Wifi, WifiOff, Clock, Microscope } from 'lucide-react';
 import { toast } from "sonner";
 
 export default function Home() {
   const [histId, setHistId] = useState<string>();
   const [modernId, setModernId] = useState<string>();
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedModernArticle, setSelectedModernArticle] = useState<Article | null>(null);
+  const [selectedHistoricalArticle, setSelectedHistoricalArticle] = useState<Article | null>(null);
   const [extractedText, setExtractedText] = useState<string>('');
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
   
@@ -21,11 +23,15 @@ export default function Home() {
   useEffect(() => {
     const checkBackendConnection = async () => {
       try {
-        const response = await fetch(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
-        if (response.ok) {
+        const health = await api.healthCheck();
+        if (health && health.status === 'healthy') {
           setBackendConnected(true);
         } else {
           setBackendConnected(false);
+          if (health && health.missing_env_vars.length > 0) {
+            console.warn('Backend missing environment variables:', health.missing_env_vars);
+            toast.error(`Backend missing environment variables: ${health.missing_env_vars.join(', ')}`);
+          }
         }
       } catch (error) {
         console.error('Backend connection error:', error);
@@ -37,30 +43,38 @@ export default function Home() {
   }, []);
 
   // Retry connection
-  const retryConnection = () => {
+  const retryConnection = async () => {
     setBackendConnected(null); // Set to loading state
     toast.info("Checking backend connection...");
     
-    fetch(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-      .then(response => {
-        if (response.ok) {
-          setBackendConnected(true);
-          toast.success("Backend connected successfully");
-        } else {
-          setBackendConnected(false);
-          toast.error("Backend connection failed");
-        }
-      })
-      .catch(error => {
-        console.error('Backend connection error:', error);
+    try {
+      const health = await api.healthCheck();
+      if (health && health.status === 'healthy') {
+        setBackendConnected(true);
+        toast.success("Backend connected successfully");
+      } else {
         setBackendConnected(false);
-        toast.error("Backend connection failed");
-      });
+        if (health && health.missing_env_vars.length > 0) {
+          toast.error(`Backend missing environment variables: ${health.missing_env_vars.join(', ')}`);
+        } else {
+          toast.error("Backend services are unhealthy");
+        }
+      }
+    } catch (error) {
+      console.error('Backend connection error:', error);
+      setBackendConnected(false);
+      toast.error("Backend connection failed");
+    }
   };
 
-  const handleArticleSelect = (article: Article, nodeId: string) => {
-    setSelectedArticle(article);
+  const handleModernArticleSelect = (article: Article, nodeId: string) => {
+    setSelectedModernArticle(article);
     setModernId(nodeId);
+  };
+
+  const handleHistoricalArticleSelect = (article: Article, nodeId: string) => {
+    setSelectedHistoricalArticle(article);
+    setHistId(nodeId);
   };
 
   const handleTextExtracted = (text: string, nodeId: string) => {
@@ -129,47 +143,93 @@ export default function Home() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Left Column */}
-          <div className="md:col-span-2 space-y-6">
-            <SpineSearch onArticleSelect={handleArticleSelect} />
-
-            {/* Selected Article Info */}
-            {selectedArticle && (
-              <div className="p-4 border rounded-lg bg-muted/30">
-                <h3 className="font-medium">Selected Modern Study:</h3>
-                <p className="text-sm mt-1">
-                  <span className="font-semibold">{selectedArticle.title}</span>
-                  <br />
-                  <span className="text-muted-foreground">
-                    {selectedArticle.authors?.join(', ')}
-                  </span>
-                </p>
-                {modernId && (
-                  <p className="text-xs font-mono mt-2">ID: {modernId}</p>
-                )}
-              </div>
-            )}
-
-            {/* Historical Text Info */}
-            {extractedText && (
-              <div className="p-4 border rounded-lg bg-muted/30">
-                <h3 className="font-medium">Historical Observation:</h3>
-                <p className="text-sm mt-1 line-clamp-3">{extractedText}</p>
-                {histId && (
-                  <p className="text-xs font-mono mt-2">ID: {histId}</p>
-                )}
-              </div>
-            )}
-
-            {/* Graph Visualization (Optional) */}
-            <GraphView />
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          {/* Left Column - Unified Search */}
+          <div className="xl:col-span-2 space-y-6">
+            <UnifiedSearch 
+              onHistoricalSelect={handleHistoricalArticleSelect}
+              onModernSelect={handleModernArticleSelect}
+            />
+            
+            {/* OCR Upload - Move it below the search for better flow */}
+            <OCRUpload onTextExtracted={handleTextExtracted} />
           </div>
 
-          {/* Right Column */}
+          {/* Right Column - Status and Controls */}
           <div className="space-y-6">
+            {/* Selection Status */}
+            <div className="space-y-4">
+              {/* Selected Modern Study */}
+              {selectedModernArticle && (
+                <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Microscope className="h-4 w-4 text-blue-600" />
+                    <h3 className="font-medium text-blue-800">Selected Modern Study</h3>
+                  </div>
+                  <p className="text-sm mt-1">
+                    <span className="font-semibold">{selectedModernArticle.title}</span>
+                    <br />
+                    <span className="text-blue-700">
+                      {selectedModernArticle.authors?.slice(0, 3).join(', ')}
+                      {selectedModernArticle.authors?.length > 3 && ' et al.'}
+                    </span>
+                    <br />
+                    <span className="text-xs text-blue-600">
+                      {selectedModernArticle.journal} • {selectedModernArticle.publication_date}
+                    </span>
+                  </p>
+                  {modernId && (
+                    <p className="text-xs font-mono mt-2 text-blue-600">ID: {modernId}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Selected Historical Study */}
+              {selectedHistoricalArticle && (
+                <div className="p-4 border rounded-lg bg-amber-50 border-amber-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Clock className="h-4 w-4 text-amber-600" />
+                    <h3 className="font-medium text-amber-800">Selected Historical Study</h3>
+                  </div>
+                  <p className="text-sm mt-1">
+                    <span className="font-semibold">{selectedHistoricalArticle.title}</span>
+                    <br />
+                    <span className="text-amber-700">
+                      {selectedHistoricalArticle.authors?.slice(0, 3).join(', ')}
+                      {selectedHistoricalArticle.authors?.length > 3 && ' et al.'}
+                    </span>
+                    <br />
+                    <span className="text-xs text-amber-600">
+                      {selectedHistoricalArticle.journal} • {selectedHistoricalArticle.publication_date}
+                    </span>
+                  </p>
+                  {histId && (
+                    <p className="text-xs font-mono mt-2 text-amber-600">ID: {histId}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Historical Text Info */}
+              {extractedText && (
+                <div className="p-4 border rounded-lg bg-muted/30">
+                  <h3 className="font-medium">Historical Observation (OCR):</h3>
+                  <p className="text-sm mt-1 line-clamp-3">{extractedText}</p>
+                  {histId && (
+                    <p className="text-xs font-mono mt-2">ID: {histId}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <HypothesisPanel histId={histId} modernId={modernId} />
-            <OCRUpload onTextExtracted={handleTextExtracted} />
+            
+            {/* Graph Visualization */}
+            <GraphView 
+              histId={histId} 
+              modernId={modernId}
+              selectedHistoricalArticle={selectedHistoricalArticle}
+              selectedModernArticle={selectedModernArticle}
+            />
           </div>
         </div>
       </main>

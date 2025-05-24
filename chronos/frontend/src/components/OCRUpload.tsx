@@ -33,14 +33,32 @@ export default function OCRUpload({ onTextExtracted }: OCRUploadProps) {
       return;
     }
 
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error("File size too large. Maximum 10MB allowed.");
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/tiff', 'image/bmp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Please select a valid image file (JPG, PNG, TIFF, BMP)");
+      return;
+    }
+
     setLoading(true);
     setConnectionError(false);
     
     try {
       const response = await api.processOCR(file);
-      if (response) {
+      if (response && response.text) {
         setExtractedText(response.text);
-        toast.success("Text extracted successfully");
+        if (response.text.trim() === "") {
+          toast.warning("No text could be extracted from this image. Please ensure the image contains readable text.");
+        } else {
+          toast.success(`Text extracted successfully (${response.text.length} characters)`);
+        }
       } else {
         setConnectionError(true);
         toast.error("Could not connect to the backend OCR service");

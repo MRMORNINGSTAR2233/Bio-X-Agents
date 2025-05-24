@@ -21,11 +21,35 @@ wheels/
 *.egg
 MANIFEST
 .env
+.env.*
 .venv
 env/
 venv/
 ENV/
 .python-version
+
+# Environment variables (comprehensive)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+.env.staging
+.env.staging.local
+*.env
+.environment
+
+# API Keys and Secrets
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+config/secrets.json
+config/local.json
 
 # Node/Next.js
 node_modules/
